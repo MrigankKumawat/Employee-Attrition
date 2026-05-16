@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employee Attrition Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080d14;
+    --surface:   #0f1923;
+    --border:    #1e2d3d;
+    --accent:    #00d4ff;
+    --accent2:   #7c3aed;
+    --warn:      #f59e0b;
+    --danger:    #ef4444;
+    --success:   #10b981;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --label:     #94a3b8;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  /* noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .badge {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(0,212,255,.12), rgba(124,58,237,.12));
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 100px;
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 800;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 40%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+  header p {
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 300;
+  }
+
+  /* ── Result banner ── */
+  .result-banner {
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 36px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    animation: slideIn .4s ease;
+  }
+  .result-banner.leaving {
+    background: linear-gradient(135deg, rgba(239,68,68,.12), rgba(239,68,68,.04));
+    border: 1px solid rgba(239,68,68,.35);
+  }
+  .result-banner.staying {
+    background: linear-gradient(135deg, rgba(16,185,129,.12), rgba(16,185,129,.04));
+    border: 1px solid rgba(16,185,129,.35);
+  }
+  .result-icon { font-size: 36px; line-height: 1; }
+  .result-text h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .result-banner.leaving .result-text h2 { color: var(--danger); }
+  .result-banner.staying .result-text h2 { color: var(--success); }
+  .result-text p { color: var(--muted); font-size: 14px; }
+  .conf-pill {
+    margin-left: auto;
+    text-align: center;
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 20px;
+    flex-shrink: 0;
+  }
+  .conf-pill span { display: block; }
+  .conf-pill .num {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--accent);
+  }
+  .conf-pill .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ── Sections ── */
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: rgba(255,255,255,.02); }
+  .section-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .5px;
+  }
+  .section-sub { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .chevron { color: var(--muted); transition: transform .25s; font-size: 12px; }
+  .section.open .chevron { transform: rotate(180deg); }
+
+  .section-body { padding: 20px 24px 24px; }
+  .section:not(.open) .section-body { display: none; }
+
+  /* ── Grid of fields ── */
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--label);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+
+  input, select {
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 11px 14px;
+    outline: none;
+    transition: border-color .2s, background .2s;
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  input:focus, select:focus {
+    border-color: var(--accent);
+    background: rgba(0,212,255,.04);
+  }
+  input::placeholder { color: var(--muted); }
+
+  /* range slider */
+  .range-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .range-row { display: flex; align-items: center; gap: 10px; }
+  input[type=range] {
+    -webkit-appearance: none;
+    background: var(--border);
+    border: none;
+    border-radius: 4px;
+    height: 5px;
+    padding: 0;
+    flex: 1;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 0 3px rgba(0,212,255,.2);
+  }
+  input[type=range]:focus { background: rgba(0,212,255,.1); }
+  .range-val {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    width: 24px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ── Submit ── */
+  .submit-row { margin-top: 28px; }
+  button[type=submit] {
+    width: 100%;
+    padding: 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 14px;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: opacity .2s, transform .15s;
+  }
+  button[type=submit]:hover { opacity: .9; transform: translateY(-1px); }
+  button[type=submit]:active { transform: translateY(0); }
+  button[type=submit]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,.1), transparent);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* select arrow */
+  .select-wrap { position: relative; }
+  .select-wrap::after {
+    content: '▾';
+    position: absolute;
+    right: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+    font-size: 12px;
+  }
+  select { padding-right: 32px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="badge">ML · Random Forest</div>
+    <h1>Attrition Predictor</h1>
+    <p>Fill in the employee details below to predict attrition risk</p>
+  </header>
+
+  {% if result %}
+  <div class="result-banner {{ result }}">
+    <div class="result-icon">{{ '⚠️' if result == 'leaving' else '✅' }}</div>
+    <div class="result-text">
+      <h2>{{ 'High Risk — Likely to Leave' if result == 'leaving' else 'Low Risk — Likely to Stay' }}</h2>
+      <p>{{ 'This employee shows signs of attrition risk.' if result == 'leaving' else 'This employee appears engaged and stable.' }}</p>
+    </div>
+    <div class="conf-pill">
+      <span class="num">{{ confidence }}%</span>
+      <span class="lbl">Confidence</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <form action="/predict" method="POST">
+
+    <!-- Section 1: Personal Info -->
+    <div class="section open">
+      <div class="section-header" onclick="toggle(this)">
+        <div class="section-icon" style="background:rgba(0,212,255,.12);color:var(--accent)">👤</div>
+        <span class="section-title">Personal Information</span>
+        <span class="section-sub">3 fields</span>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+
+          <div class="field">
+            <label>Age</label>
+            <input type="number" name="Age" placeholder="e.g. 35" min="18" max="65" required>
+          </div>
+
+          <div class="field">
+            <label>Gender</label>
+            <div class="select-wrap">
+              <select name="Gender">
+                <option>Male</option>
+                <option>Female</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Marital Status</label>
+            <div class="select-wrap">
+              <select name="MaritalStatus">
+                <option>Single</option>
+                <option>Married</option>
+                <option>Divorced</option>
+              </select>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Job Info -->
+    <div class="section open">
+      <div class="section-header" onclick="toggle(this)">
+        <div class="section-icon" style="background:rgba(124,58,237,.12);color:#a78bfa">💼</div>
+        <span class="section-title">Job Details</span>
+        <span class="section-sub">7 fields</span>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+
+          <div class="field">
+            <label>Department</label>
+            <div class="select-wrap">
+              <select name="Department">
+                <option>Sales</option>
+                <option>Research &amp; Development</option>
+                <option>Human Resources</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Job Role</label>
+            <div class="select-wrap">
+              <select name="JobRole">
+                <option>Sales Executive</option>
+                <option>Research Scientist</option>
+                <option>Laboratory Technician</option>
+                <option>Manufacturing Director</option>
+                <option>Healthcare Representative</option>
+                <option>Manager</option>
+                <option>Sales Representative</option>
+                <option>Research Director</option>
+                <option>Human Resources</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Job Level <span style="color:var(--muted)">(1–5)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="JobLevel" min="1" max="5" value="2" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">2</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Business Travel</label>
+            <div class="select-wrap">
+              <select name="BusinessTravel">
+                <option>Travel_Rarely</option>
+                <option>Travel_Frequently</option>
+                <option>Non-Travel</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>OverTime</label>
+            <div class="select-wrap">
+              <select name="OverTime">
+                <option>No</option>
+                <option>Yes</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Distance From Home <span style="color:var(--muted)">(km)</span></label>
+            <input type="number" name="DistanceFromHome" placeholder="e.g. 10" min="1" max="29" required>
+          </div>
+
+          <div class="field">
+            <label>Num Companies Worked</label>
+            <input type="number" name="NumCompaniesWorked" placeholder="e.g. 3" min="0" max="9" required>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Compensation -->
+    <div class="section open">
+      <div class="section-header" onclick="toggle(this)">
+        <div class="section-icon" style="background:rgba(16,185,129,.12);color:#34d399">💰</div>
+        <span class="section-title">Compensation</span>
+        <span class="section-sub">4 fields</span>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+
+          <div class="field">
+            <label>Monthly Income <span style="color:var(--muted)">(₹)</span></label>
+            <input type="number" name="MonthlyIncome" placeholder="e.g. 50000" min="1009" max="199990" required>
+          </div>
+
+          <div class="field">
+            <label>Daily Rate</label>
+            <input type="number" name="DailyRate" placeholder="e.g. 800" min="102" max="1499" required>
+          </div>
+
+          <div class="field">
+            <label>Hourly Rate</label>
+            <input type="number" name="HourlyRate" placeholder="e.g. 65" min="30" max="100" required>
+          </div>
+
+          <div class="field">
+            <label>Monthly Rate</label>
+            <input type="number" name="MonthlyRate" placeholder="e.g. 14000" min="2094" max="26999" required>
+          </div>
+
+          <div class="field">
+            <label>Salary Hike % <span style="color:var(--muted)">(11–25)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="PercentSalaryHike" min="11" max="25" value="15" oninput="this.nextElementSibling.textContent=this.value+'%'">
+                <span class="range-val">15%</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: Satisfaction & Performance -->
+    <div class="section open">
+      <div class="section-header" onclick="toggle(this)">
+        <div class="section-icon" style="background:rgba(245,158,11,.12);color:#fbbf24">📊</div>
+        <span class="section-title">Satisfaction &amp; Performance</span>
+        <span class="section-sub">6 fields</span>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+
+          <div class="field">
+            <label>Job Satisfaction <span style="color:var(--muted)">(1–4)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="JobSatisfaction" min="1" max="4" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Env Satisfaction <span style="color:var(--muted)">(1–4)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="EnvironmentSatisfaction" min="1" max="4" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Relationship Satisfaction <span style="color:var(--muted)">(1–4)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="RelationshipSatisfaction" min="1" max="4" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Work-Life Balance <span style="color:var(--muted)">(1–4)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="WorkLifeBalance" min="1" max="4" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Job Involvement <span style="color:var(--muted)">(1–4)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="JobInvolvement" min="1" max="4" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Performance Rating <span style="color:var(--muted)">(3–4)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="PerformanceRating" min="3" max="4" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 5: Experience & Education -->
+    <div class="section open">
+      <div class="section-header" onclick="toggle(this)">
+        <div class="section-icon" style="background:rgba(239,68,68,.12);color:#f87171">🎓</div>
+        <span class="section-title">Experience &amp; Education</span>
+        <span class="section-sub">6 fields</span>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+
+          <div class="field">
+            <label>Education <span style="color:var(--muted)">(1–5)</span></label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="Education" min="1" max="5" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Total Working Years</label>
+            <input type="number" name="TotalWorkingYears" placeholder="e.g. 8" min="0" max="40" required>
+          </div>
+
+          <div class="field">
+            <label>Training Times Last Year</label>
+            <div class="range-wrap">
+              <div class="range-row">
+                <input type="range" name="TrainingTimesLastYear" min="0" max="6" value="3" oninput="this.nextElementSibling.textContent=this.value">
+                <span class="range-val">3</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Years Since Promotion</label>
+            <input type="number" name="YearsSinceLastPromotion" placeholder="e.g. 2" min="0" max="15" required>
+          </div>
+
+          <div class="field">
+            <label>Years With Manager</label>
+            <input type="number" name="YearsWithCurrManager" placeholder="e.g. 4" min="0" max="17" required>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="submit-row">
+      <button type="submit">RUN PREDICTION →</button>
+    </div>
+
+  </form>
+
+</div>
+
+<script>
+function toggle(header) {
+  header.closest('.section').classList.toggle('open');
+}
+</script>
+</body>
+</html>
